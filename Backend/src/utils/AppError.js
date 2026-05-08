@@ -1,0 +1,9 @@
+// PHASE7-FIX: Lightweight application error for clean service/controller boundaries.
+export class AppError extends Error {
+  constructor(message, statusCode = 500, code = "APP_ERROR") {
+    super(message);
+    this.name = "AppError";
+    this.statusCode = statusCode;
+    this.code = code;
+  }
+}

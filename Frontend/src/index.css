@@ -1,0 +1,34 @@
+@import "tailwindcss";
+
+:root {
+	color-scheme: light;
+	--cpb-bg-start: #f7fafc;
+	--cpb-bg-mid: #eef4ff;
+	--cpb-bg-end: #e7eef8;
+	--cpb-text-main: #0f172a;
+}
+
+* {
+	box-sizing: border-box;
+}
+
+html,
+body,
+#root {
+	min-height: 100%;
+}
+
+body {
+	margin: 0;
+	color: var(--cpb-text-main);
+	font-family: "DM Sans", "Segoe UI", "Helvetica Neue", Arial, sans-serif;
+	background:
+		radial-gradient(circle at 0% 0%, rgba(29, 111, 164, 0.15), transparent 38%),
+		radial-gradient(circle at 100% 100%, rgba(15, 79, 140, 0.12), transparent 42%),
+		linear-gradient(155deg, var(--cpb-bg-start) 0%, var(--cpb-bg-mid) 50%, var(--cpb-bg-end) 100%);
+}
+
+.cpb-app-page {
+	min-height: 100vh;
+	width: 100%;
+}

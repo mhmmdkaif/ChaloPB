@@ -1,0 +1,11 @@
+-- Phase 6 cleanup (applied via Supabase MCP - documented here for history)
+-- trip 47 ended_at fixed
+-- trips.is_dev_data column added
+-- trips CHECK constraints added (completed_must_have_ended_at, ended_after_started)
+-- trip_timeline and trip_stop_metrics views dropped
+-- archive_old_trip_events() function created
+-- get_db_stats() function created
+-- idx_trips_not_dev_data partial index added
+-- idx_trip_events_occurred_trip composite index added
+-- All tables ANALYZE'd
+SELECT 1;
