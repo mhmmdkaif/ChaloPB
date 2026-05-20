@@ -43,3 +43,7 @@ Thumbs.db
 # Local database dumps
 .dataindb.sql
 .schema.sql
+
+# Expo (mobile app)
+.expo/
+.expo-shared/

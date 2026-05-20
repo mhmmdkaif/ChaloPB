@@ -1,7 +1,7 @@
 {
   "name": "backend",
   "version": "1.0.0",
-  "main": "index.js",
+  "main": "src/server.js",
   "type": "module",
   "scripts": {
     "test": "jest --runInBand",
@@ -33,11 +33,9 @@
     "@babel/core": "^7.29.0",
     "@babel/preset-env": "^7.29.2",
     "@jest/globals": "^30.3.0",
-    "@jest/transform": "^30.3.0",
     "babel-jest": "^30.3.0",
     "jest": "^30.3.0",
     "jest-environment-node": "^30.3.0",
-    "jest-mock": "^30.3.0",
     "nodemon": "^3.1.11"
   }
 }

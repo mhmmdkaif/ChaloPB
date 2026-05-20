@@ -1,152 +1,203 @@
 -- ============================================================
--- ChaloPB Database Schema - Current State
--- Generated: 2026-04-25
--- DO NOT RUN THIS FILE - use migrations/ for schema changes
--- This is a reference snapshot of the current database state
+--  ChaloPB — Supabase Database Schema
+--  Project: ChaloPB (wzjtikjkinjikihmszlz)
+--  Region:  ap-southeast-2 (Sydney)
+--
+--  How to use:
+--  1. Create a new Supabase project at https://supabase.com
+--  2. Go to SQL Editor and paste + run this entire file
+--  3. All tables, constraints, and RLS will be set up
 -- ============================================================
 
--- TABLES (dependency order)
-CREATE TABLE users (
-  id BIGSERIAL PRIMARY KEY,
-  name VARCHAR(120) NOT NULL,
-  email VARCHAR(255) NOT NULL UNIQUE,
-  password TEXT NOT NULL,
-  role VARCHAR(20) NOT NULL DEFAULT 'user' CHECK (role IN ('user', 'driver', 'admin')),
-  created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+
+-- ------------------------------------------------------------
+-- 1. USERS
+-- ------------------------------------------------------------
+CREATE TABLE public.users (
+    id          SERIAL PRIMARY KEY,
+    name        VARCHAR,
+    email       VARCHAR NOT NULL UNIQUE,
+    password    TEXT NOT NULL,
+    role        VARCHAR NOT NULL DEFAULT 'user'
+                    CHECK (role IN ('user', 'driver', 'admin')),
+    created_at  TIMESTAMPTZ NOT NULL DEFAULT CURRENT_TIMESTAMP
 );
 
-CREATE TABLE drivers (
-  id BIGSERIAL PRIMARY KEY,
-  user_id BIGINT NOT NULL UNIQUE REFERENCES users(id) ON DELETE CASCADE,
-  license_number VARCHAR(64) NOT NULL UNIQUE,
-  phone VARCHAR(24) NOT NULL,
-  created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+ALTER TABLE public.users ENABLE ROW LEVEL SECURITY;
+
+
+-- ------------------------------------------------------------
+-- 2. DRIVERS
+-- ------------------------------------------------------------
+CREATE TABLE public.drivers (
+    id             SERIAL PRIMARY KEY,
+    user_id        INTEGER NOT NULL REFERENCES public.users(id),
+    license_number VARCHAR,
+    phone          VARCHAR
 );
 
-CREATE TABLE routes (
-  id BIGSERIAL PRIMARY KEY,
-  route_name VARCHAR(120) NOT NULL,
-  start_point VARCHAR(120) NOT NULL,
-  end_point VARCHAR(120) NOT NULL,
-  route_geometry_distance_m INTEGER,
-  route_geometry_duration_s INTEGER,
-  route_geometry_json JSONB,
-  route_geometry_updated_at TIMESTAMPTZ,
-  created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+ALTER TABLE public.drivers ENABLE ROW LEVEL SECURITY;
+
+
+-- ------------------------------------------------------------
+-- 3. ROUTES
+-- ------------------------------------------------------------
+CREATE TABLE public.routes (
+    id                           SERIAL PRIMARY KEY,
+    route_name                   VARCHAR UNIQUE,
+    start_point                  VARCHAR,
+    end_point                    VARCHAR,
+    route_geometry_json          JSONB,
+    route_geometry_distance_m    INTEGER,
+    route_geometry_duration_s    INTEGER,
+    route_geometry_updated_at    TIMESTAMPTZ
 );
 
-CREATE TABLE stops (
-  id BIGSERIAL PRIMARY KEY,
-  stop_name VARCHAR(120) NOT NULL,
-  latitude DOUBLE PRECISION NOT NULL,
-  longitude DOUBLE PRECISION NOT NULL,
-  created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+ALTER TABLE public.routes ENABLE ROW LEVEL SECURITY;
+
+
+-- ------------------------------------------------------------
+-- 4. STOPS
+-- ------------------------------------------------------------
+CREATE TABLE public.stops (
+    id         SERIAL PRIMARY KEY,
+    stop_name  VARCHAR UNIQUE,
+    latitude   NUMERIC,
+    longitude  NUMERIC
 );
 
-CREATE TABLE buses (
-  id BIGSERIAL PRIMARY KEY,
-  bus_number VARCHAR(32) NOT NULL UNIQUE,
-  route_id BIGINT REFERENCES routes(id) ON DELETE SET NULL,
-  driver_id BIGINT REFERENCES drivers(id) ON DELETE SET NULL,
-  created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+ALTER TABLE public.stops ENABLE ROW LEVEL SECURITY;
+
+
+-- ------------------------------------------------------------
+-- 5. BUSES
+-- ------------------------------------------------------------
+CREATE TABLE public.buses (
+    id          SERIAL PRIMARY KEY,
+    bus_number  VARCHAR NOT NULL UNIQUE,
+    route_id    INTEGER NOT NULL REFERENCES public.routes(id),
+    driver_id   INTEGER REFERENCES public.drivers(id)
 );
 
-CREATE TABLE route_stops (
-  id BIGSERIAL PRIMARY KEY,
-  route_id BIGINT NOT NULL REFERENCES routes(id) ON DELETE CASCADE,
-  stop_id BIGINT NOT NULL REFERENCES stops(id) ON DELETE CASCADE,
-  stop_order INTEGER NOT NULL CHECK (stop_order > 0),
-  created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
-  UNIQUE (route_id, stop_id),
-  UNIQUE (route_id, stop_order)
+ALTER TABLE public.buses ENABLE ROW LEVEL SECURITY;
+
+
+-- ------------------------------------------------------------
+-- 6. LIVE LOCATIONS
+-- ------------------------------------------------------------
+CREATE TABLE public.live_locations (
+    id               SERIAL PRIMARY KEY,
+    bus_id           INTEGER NOT NULL UNIQUE REFERENCES public.buses(id),
+    latitude         NUMERIC NOT NULL,
+    longitude        NUMERIC NOT NULL,
+    speed            NUMERIC,
+    accuracy         NUMERIC,
+    device_timestamp TIMESTAMPTZ,
+    updated_at       TIMESTAMPTZ NOT NULL DEFAULT CURRENT_TIMESTAMP
 );
 
-CREATE TABLE trips (
-  id BIGSERIAL PRIMARY KEY,
-  bus_id BIGINT NOT NULL REFERENCES buses(id),
-  route_id BIGINT NOT NULL REFERENCES routes(id),
-  driver_id BIGINT NOT NULL REFERENCES drivers(id),
-  status VARCHAR(20) NOT NULL CHECK (status IN ('active', 'completed', 'cancelled', 'scheduled')),
-  date DATE,
-  started_at TIMESTAMPTZ,
-  ended_at TIMESTAMPTZ,
-  created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
-  is_dev_data BOOLEAN NOT NULL DEFAULT FALSE,
-  CONSTRAINT completed_must_have_ended_at
-    CHECK (status <> 'completed' OR ended_at IS NOT NULL),
-  CONSTRAINT ended_after_started
-    CHECK (ended_at IS NULL OR started_at IS NULL OR ended_at >= started_at)
+ALTER TABLE public.live_locations ENABLE ROW LEVEL SECURITY;
+
+
+-- ------------------------------------------------------------
+-- 7. ROUTE STOPS  (ordered stops for each route)
+-- ------------------------------------------------------------
+CREATE TABLE public.route_stops (
+    id          SERIAL PRIMARY KEY,
+    route_id    INTEGER NOT NULL REFERENCES public.routes(id),
+    stop_id     INTEGER NOT NULL REFERENCES public.stops(id),
+    stop_order  INTEGER NOT NULL
 );
 
-CREATE TABLE trip_stops (
-  id BIGSERIAL PRIMARY KEY,
-  trip_id BIGINT NOT NULL REFERENCES trips(id) ON DELETE CASCADE,
-  stop_id BIGINT NOT NULL REFERENCES stops(id),
-  stop_order INTEGER NOT NULL CHECK (stop_order > 0),
-  state VARCHAR(20) NOT NULL DEFAULT 'pending'
-    CHECK (state IN ('pending', 'approaching', 'arrived', 'departed')),
-  arrived_at TIMESTAMPTZ,
-  departed_at TIMESTAMPTZ,
-  updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
-  UNIQUE (trip_id, stop_id)
+ALTER TABLE public.route_stops ENABLE ROW LEVEL SECURITY;
+
+
+-- ------------------------------------------------------------
+-- 8. TRIPS
+-- ------------------------------------------------------------
+CREATE TABLE public.trips (
+    id          SERIAL PRIMARY KEY,
+    bus_id      INTEGER NOT NULL REFERENCES public.buses(id),
+    route_id    INTEGER NOT NULL REFERENCES public.routes(id),
+    driver_id   INTEGER NOT NULL REFERENCES public.drivers(id),
+    status      VARCHAR NOT NULL DEFAULT 'scheduled'
+                    CHECK (status IN ('scheduled', 'active', 'completed')),
+    date        DATE NOT NULL,
+    started_at  TIMESTAMPTZ,
+    ended_at    TIMESTAMPTZ,
+    is_dev_data BOOLEAN NOT NULL DEFAULT false,
+    created_at  TIMESTAMPTZ NOT NULL DEFAULT CURRENT_TIMESTAMP
 );
 
-CREATE TABLE trip_events (
-  id BIGSERIAL PRIMARY KEY,
-  trip_id BIGINT NOT NULL REFERENCES trips(id) ON DELETE CASCADE,
-  stop_id BIGINT REFERENCES stops(id),
-  event_type VARCHAR(32) NOT NULL
-    CHECK (event_type IN ('started', 'approaching', 'arrived', 'departed', 'ended', 'stale_warning')),
-  occurred_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
-  metadata JSONB NOT NULL DEFAULT '{}'::jsonb,
-  created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+ALTER TABLE public.trips ENABLE ROW LEVEL SECURITY;
+
+
+-- ------------------------------------------------------------
+-- 9. TRIP STOPS  (real-time state of each stop within a trip)
+-- ------------------------------------------------------------
+CREATE TABLE public.trip_stops (
+    id          SERIAL PRIMARY KEY,
+    trip_id     INTEGER NOT NULL REFERENCES public.trips(id),
+    stop_id     INTEGER NOT NULL REFERENCES public.stops(id),
+    stop_order  INTEGER NOT NULL,
+    state       TEXT NOT NULL DEFAULT 'pending'
+                    CHECK (state IN ('pending', 'approaching', 'arrived', 'departed')),
+    arrived_at  TIMESTAMPTZ,
+    departed_at TIMESTAMPTZ,
+    entered_at  TIMESTAMP,
+    updated_at  TIMESTAMPTZ NOT NULL DEFAULT now()
 );
 
-CREATE TABLE live_locations (
-  id BIGSERIAL PRIMARY KEY,
-  bus_id BIGINT NOT NULL UNIQUE REFERENCES buses(id) ON DELETE CASCADE,
-  latitude DOUBLE PRECISION NOT NULL,
-  longitude DOUBLE PRECISION NOT NULL,
-  speed DOUBLE PRECISION NOT NULL DEFAULT 0,
-  accuracy DOUBLE PRECISION,
-  heading DOUBLE PRECISION,
-  device_timestamp TIMESTAMPTZ,
-  updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+ALTER TABLE public.trip_stops ENABLE ROW LEVEL SECURITY;
+
+
+-- ------------------------------------------------------------
+-- 10. TRIP EVENTS  (audit log of events during a trip)
+-- ------------------------------------------------------------
+CREATE TABLE public.trip_events (
+    id          BIGSERIAL PRIMARY KEY,
+    trip_id     INTEGER NOT NULL REFERENCES public.trips(id),
+    stop_id     INTEGER REFERENCES public.stops(id),
+    event_type  VARCHAR NOT NULL
+                    CHECK (event_type IN ('started', 'approaching', 'arrived', 'departed', 'ended', 'stalled', 'resumed')),
+    occurred_at TIMESTAMPTZ NOT NULL DEFAULT now(),
+    metadata    JSONB,
+    created_at  TIMESTAMPTZ NOT NULL DEFAULT now()
 );
 
-CREATE TABLE token_blocklist (
-  id BIGSERIAL PRIMARY KEY,
-  jti TEXT NOT NULL UNIQUE,
-  user_id BIGINT NOT NULL REFERENCES users(id) ON DELETE CASCADE,
-  blocked_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
-  expires_at TIMESTAMPTZ NOT NULL
+ALTER TABLE public.trip_events ENABLE ROW LEVEL SECURITY;
+
+
+-- ------------------------------------------------------------
+-- 11. TOKEN BLOCKLIST  (invalidated JWT tokens)
+-- ------------------------------------------------------------
+CREATE TABLE public.token_blocklist (
+    id          BIGSERIAL PRIMARY KEY,
+    jti         TEXT NOT NULL UNIQUE,
+    user_id     INTEGER NOT NULL REFERENCES public.users(id),
+    blocked_at  TIMESTAMPTZ NOT NULL DEFAULT now(),
+    expires_at  TIMESTAMPTZ NOT NULL
 );
 
--- VIEWS
--- active_trips_live
--- trip_full_timeline
--- trip_reliability_metrics
+ALTER TABLE public.token_blocklist ENABLE ROW LEVEL SECURITY;
 
--- INDEXES
-CREATE INDEX IF NOT EXISTS idx_buses_route_id ON buses(route_id);
-CREATE INDEX IF NOT EXISTS idx_buses_driver_id ON buses(driver_id);
-CREATE INDEX IF NOT EXISTS idx_route_stops_route_order ON route_stops(route_id, stop_order);
-CREATE UNIQUE INDEX IF NOT EXISTS unique_active_bus ON trips(bus_id) WHERE status = 'active';
-CREATE UNIQUE INDEX IF NOT EXISTS unique_active_driver ON trips(driver_id) WHERE status = 'active';
-CREATE INDEX IF NOT EXISTS idx_trips_not_dev_data ON trips(created_at DESC) WHERE is_dev_data = FALSE;
-CREATE INDEX IF NOT EXISTS idx_trip_stops_trip_order_state ON trip_stops(trip_id, stop_order, state);
-CREATE INDEX IF NOT EXISTS idx_trip_stops_trip_not_departed ON trip_stops(trip_id, stop_order) WHERE state <> 'departed';
-CREATE INDEX IF NOT EXISTS idx_trip_events_trip_id ON trip_events(trip_id);
-CREATE INDEX IF NOT EXISTS idx_trip_events_occurred_trip ON trip_events(occurred_at DESC, trip_id);
-CREATE INDEX IF NOT EXISTS idx_live_locations_updated_at ON live_locations(updated_at DESC);
-CREATE INDEX IF NOT EXISTS idx_token_blocklist_expires_at ON token_blocklist(expires_at);
 
--- CONSTRAINTS
--- trips.completed_must_have_ended_at
--- trips.ended_after_started
--- trip_stops.state CHECK (pending, approaching, arrived, departed)
--- trip_events.event_type CHECK (started, approaching, arrived, departed, ended, stale_warning)
+-- ------------------------------------------------------------
+-- 12. SCHEMA MIGRATIONS  (internal migration tracking)
+-- ------------------------------------------------------------
+CREATE TABLE public.schema_migrations (
+    version     TEXT PRIMARY KEY,
+    filename    TEXT NOT NULL,
+    checksum    TEXT,
+    applied_at  TIMESTAMPTZ NOT NULL DEFAULT now()
+);
 
--- FUNCTIONS
--- archive_old_trip_events(days INTEGER)
--- get_db_stats()
+-- NOTE: RLS is intentionally left disabled on schema_migrations
+-- as it is an internal table not accessed by client apps.
+-- If you want to lock it down anyway, run:
+--   ALTER TABLE public.schema_migrations ENABLE ROW LEVEL SECURITY;
+
+
+-- ============================================================
+--  END OF SCHEMA
+-- ============================================================
